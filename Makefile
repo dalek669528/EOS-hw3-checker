@@ -1,6 +1,6 @@
 CC:=g++
 OBJS = sockop
-TARGETS = checker #server
+TARGETS = checker server
 TAGS = -lpthread
 
 all: $(TARGETS)	
@@ -12,4 +12,4 @@ checker: checker.cpp $(OBJS).c
 	$(CC) -o $@ $^ $(TAGS)
 
 clean:
-	rm $(TARGETS)
+	rm $(TARGETS) result.txt

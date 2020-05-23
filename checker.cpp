@@ -524,7 +524,7 @@ void read_command(string filename){
     ifstream file;
     file.open(filename, ifstream::in);
     if (!file){
-        cout<<"Error opening file.\n";
+        cerr<<"Error opening file.\n";
         exit(1);
     }
     while(!file.eof()){
@@ -565,7 +565,7 @@ int myclient(){
                 snd = commands[i][0];
                 commands[i].erase(commands[i].begin()); 
                 if(write(connfd[i], snd.c_str(), snd.length()) < 0){
-                    cout<<"Error write.\n";
+                    perror("Error write :");
                 }
                 total++;
                 // cout<<i<<" "<<connfd[i]<<" :"<<snd<<endl;
@@ -657,7 +657,7 @@ void read_file(string argv){
     fstream read_file;
     read_file.open(argv.c_str(), ifstream::in);
     if (!read_file){
-        cout << "can't open input file\n";
+        cerr << "can't open input file\n";
         exit(1);
     }
     read_file >> mydata.num;
@@ -687,7 +687,7 @@ vector<log_file> read_log_file(string argv){
     char *p;
     file.open(argv.c_str(), ifstream::in);
     if (!read_file){
-        cout << "can't open log file\n";
+        cerr << "can't open log file\n";
         exit(1);
     }
     while (!file.eof()){
