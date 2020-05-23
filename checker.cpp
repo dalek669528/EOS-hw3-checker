@@ -433,7 +433,7 @@ int myclient(){
             if(!commands[i].empty()){
                 string snd;
                 snd = commands[i][0];
-                snd += "\n";
+                // snd += "\n";
                 commands[i].erase(commands[i].begin()); 
                 if(write(connfd[i], snd.c_str(), snd.length()) < 0){
                     perror("Error write :");
