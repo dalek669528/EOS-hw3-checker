@@ -10,29 +10,33 @@
 #include <unistd.h>
 #include <limits.h>
 #include <time.h>
+#include <algorithm>
 #include "sockop.h"
 #define BUF_SIZE 1024
 using namespace std;
 
 bool log_static[100] = {false};
 string my_id[100] = {""};
-vector<string>log_id;
+vector<string> log_id;
+int buy_succ = 0;
 
 struct save_area{
     vector<int>start;
     vector<int>end;
 }save_areas;
 
-struct City{
+class City{
+public:
     int id;
+    int sum;
     string name;
     int mask[3];
 };
 
-struct Store{
+class Store{
+public:
     int num;
     string name;
-    // vector<City> citys;
     map<int, City> cities_map;
 };
 
@@ -42,22 +46,22 @@ public:
     int day;
     int alcohol;
     int ori_alcohol;
-    // vector<Store> stores;
     map<string, Store> stores_map;
     map<string, bool> buy_list;
 };
 
 
-struct log_file{
+struct Log_file{
     int index;
     int day;
+    int total_day;
     int connfd;
     string command;
     string results;
 };
 
 void read_file(string argv);
-vector<log_file> read_log_file(string argv);
+vector<Log_file> read_log_file(string argv);
 bool judge_correction(string msg);
 string int2string(int input);
 string show2string();
@@ -65,8 +69,10 @@ string replace(string str, string tar, string c);
 bool judge_day(string id);
 bool check_history(string id);
 void read_command(string filename);
+timespec diff(timespec start, timespec end);
 
 bool COUT_FLAG = true;
+bool N_FLAG = false;
 string logfile_name;
 DB mydata;
 string server, port;
@@ -74,19 +80,11 @@ vector<string> commands[30];
 double timeStart, timeEnd;
 timespec time1, time2;
 
-timespec diff(timespec start, timespec end) {
-    timespec temp;
-    if ((end.tv_nsec - start.tv_nsec) < 0) {
-        temp.tv_sec = end.tv_sec - start.tv_sec - 1;
-        temp.tv_nsec = 1000000000 + end.tv_nsec - start.tv_nsec;
-    }
-    else {
-        temp.tv_sec = end.tv_sec - start.tv_sec;
-        temp.tv_nsec = end.tv_nsec - start.tv_nsec;
-    }
-    return temp;
-}
 
+
+bool city_compare(City a, City b) {
+  return a.sum > b.sum;
+}
 
 void correct_answer(ofstream &file, int index, string answer, string wrong){
     file<<"------------------------------------------"<<endl;
@@ -96,7 +94,7 @@ void correct_answer(ofstream &file, int index, string answer, string wrong){
     file<<"------------------------------------------"<<endl;
 }
 
-void check_1(vector<log_file> log_files, ofstream &error_file){
+void check_1(vector<Log_file> log_files, ofstream &error_file){
     string command;
     int count = 0;
     // int not_check=5;
@@ -243,9 +241,10 @@ bool check_flag(int index){
     return true;
 }
 
-void check_2(vector<log_file> log_files, ofstream &error_file){
+void check_2(vector<Log_file> log_files, ofstream &error_file){
     string command;
     int count = 0;
+    int buysucc = 0;
     // int not_check=5;
     for(int i=0 ; i<log_files.size() ; i++){
         command = log_files[i].command;
@@ -306,7 +305,7 @@ void check_2(vector<log_file> log_files, ofstream &error_file){
             bool buy_fail = true;
 
             string store;
-            int city_idx, mask[3];
+            int city_idx, mask[3], k = 0;
             ss>>store>>city_idx>>mask[0]>>mask[1]>>mask[2];
             
             if( log_static[connfd] && ((day==7) || (day%2==1 && (id[9]-'0')%2==1) || (day%2==0 && (id[9]-'0')%2==0)) && (mydata.buy_list.find(id) == mydata.buy_list.end()) ){
@@ -332,21 +331,42 @@ void check_2(vector<log_file> log_files, ofstream &error_file){
                                 mydata.buy_list[id] = true;
                                 log_static[connfd] = false;
                                 mydata.day++;
+                                buysucc++;
                                 buy_fail = false;
                                 if( mydata.day > 7 ){
                                     mydata.day = 1;
                                     mydata.buy_list.clear();
                                 }
                             }
+                            else{
+                                k = 1;
+                                // cerr<<k;
+                            }
                         }
+                            else{
+                            	k = 2;
+                                // cerr<<k;
+                            }
                     }
+                            else{
+                            	k = 3;
+                                // cerr<<k;
+                            }
                 }
+                            else{
+                            	k = 4;
+                                // cerr<<k;
+                            }
             }
+                            else{
+                            	k = 5;
+                                // cerr<<k;
+                            }
 
             if(buy_fail){
                 if( log_files[i].results.compare("Buy failed.") != 0 ){
                     count++;
-                    correct_answer(error_file, log_files[i].index,"Buy failed.", log_files[i].results);
+                    correct_answer(error_file, log_files[i].index,"Buy failed." , log_files[i].results);
                     //break;
                 }
             }
@@ -392,6 +412,7 @@ void check_2(vector<log_file> log_files, ofstream &error_file){
         }
     }
 
+    cerr<<"Buy successful :"<<buysucc<<endl;
     if(count  == 0){
         cerr<<"Congratulations!!! All "<<log_files.size()<<" commands are all correct!!!"<<endl;
     }
@@ -430,13 +451,15 @@ int myclient(){
     while(closed_fd < total_con){
         // cout<<closed_fd<<endl;
         for(int i = 0 ; i < 30 ; i++){
-            if(!commands[i].empty()){
+            if(!commands[i].empty() && connfd[i] != -1){
                 string snd;
                 snd = commands[i][0];
-                // snd += "\n";
+                if(N_FLAG)
+                    snd += "\n";
                 commands[i].erase(commands[i].begin()); 
                 if(write(connfd[i], snd.c_str(), snd.length()) < 0){
                     perror("Error write :");
+                    cerr<<"Error "<<connfd[i]<<endl;
                 }
                 total++;
                 if(COUT_FLAG)
@@ -468,10 +491,12 @@ int myclient(){
                     break;
                 }
                 string msg (rcv);
-                if(COUT_FLAG)
-                    cerr<<connfd[i]<<" readed\n";
-                // cout<<msg<<endl;
+                if(COUT_FLAG && rcv[0] != 'S'){
+                    // cerr<<connfd[i]<<" readed\n";
+                    cout<<connfd[i]<<" "<<msg<<endl;
+                }
                 if( msg.find("Disinfecting") != -1){
+                    buy_succ ++;
                     while((msg.find("purchase.") == -1)){
                         memset(rcv, 0, BUF_SIZE);
                         n = read(connfd[i], rcv, BUF_SIZE);
@@ -488,7 +513,9 @@ int myclient(){
                             break;
                         }
                         msg = rcv;
-                        // cout<<msg<<endl;
+                        if(COUT_FLAG && rcv[0] != 'S'){
+                            cout<<connfd[i]<<" "<<msg<<endl;
+                        }
                     }
                 }
             }
@@ -497,9 +524,38 @@ int myclient(){
     return total;
 }
 
+
+void city_sort(){
+
+    for ( map<string, Store>::iterator it = mydata.stores_map.begin() ; it != mydata.stores_map.end(); it++){
+        cout<<it->first<<endl;
+        City arr[it->second.cities_map.size()];
+        int i = 0;
+        for ( map<int, City>::iterator it_2 = it->second.cities_map.begin(); it_2 != it->second.cities_map.end(); it_2++){
+            it_2->second.sum = it_2->second.mask[0] + it_2->second.mask[1] + it_2->second.mask[2];
+            arr[i] = it_2->second;
+            i++;
+        }
+        sort(arr, (arr + it->second.cities_map.size()), city_compare);
+        for (i = 0; i < it->second.cities_map.size() ; i++){
+            cout<<arr[i].id<<" "<<arr[i].name<<" "<<arr[i].sum<<endl;
+        }
+    }
+}
+
 int main(int argc, char *argv[]){
     clock_gettime(CLOCK_REALTIME, & time1);
-    if(argc == 8){
+    if(argc == 9){
+        if( !strcmp(argv[6], "false")){
+            COUT_FLAG = false;
+        }
+        else{
+            COUT_FLAG = true;
+        }
+        logfile_name = argv[7];
+        N_FLAG = true;
+    }
+    else if(argc == 8){
         if( !strcmp(argv[6], "false")){
             COUT_FLAG = false;
         }
@@ -527,7 +583,8 @@ int main(int argc, char *argv[]){
     int total_cmd = myclient();
 
     clock_gettime(CLOCK_REALTIME, & time2);
-    cout << "\nUse " << diff(time1, time2).tv_sec << "." << diff(time1, time2).tv_nsec <<" s to process "<<total_cmd<<" commands"<< endl;
+    cout << "\nUse " << diff(time1, time2).tv_sec << "." << diff(time1, time2).tv_nsec <<" s to process "<<total_cmd<<" commands"<<endl;
+    cerr<<"Buy successful :"<<buy_succ<<endl;
     cout << "Please stop the server, and press enter.\n";
     
     string str;
@@ -541,7 +598,7 @@ int main(int argc, char *argv[]){
     read_file("inventory.txt");
     DB temp = mydata;
 
-    vector<log_file> log_files = read_log_file("result.txt");
+    vector<Log_file> log_files = read_log_file("result.txt");
     //check_log_file(log_files);
 
     ofstream error_file;
@@ -557,6 +614,7 @@ int main(int argc, char *argv[]){
     mydata = temp;
     check_2(log_files, error_file);
     error_file.close();
+    city_sort();
     return 0;
 }
 
@@ -633,9 +691,9 @@ void read_file(string argv){
     }
 }
 
-vector<log_file> read_log_file(string argv){
+vector<Log_file> read_log_file(string argv){
     ifstream file;
-    vector<log_file> log;
+    vector<Log_file> log;
     char *p;
     file.open(argv.c_str(), ifstream::in);
     if (!file.is_open()){
@@ -644,7 +702,7 @@ vector<log_file> read_log_file(string argv){
     }
     while (!file.eof()){
 
-        log_file temp;
+        Log_file temp;
 
         string str;
         getline(file, str);
@@ -782,4 +840,17 @@ bool check_history(string id){
             return false;
     }
     return true;
+}
+
+timespec diff(timespec start, timespec end) {
+    timespec temp;
+    if ((end.tv_nsec - start.tv_nsec) < 0) {
+        temp.tv_sec = end.tv_sec - start.tv_sec - 1;
+        temp.tv_nsec = 1000000000 + end.tv_nsec - start.tv_nsec;
+    }
+    else {
+        temp.tv_sec = end.tv_sec - start.tv_sec;
+        temp.tv_nsec = end.tv_nsec - start.tv_nsec;
+    }
+    return temp;
 }
